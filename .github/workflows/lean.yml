@@ -1,0 +1,28 @@
+name: Lean CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install elan
+        run: curl https://raw.githubusercontent.com/Kha/elan/master/elan-init.sh -sSfL | bash -s -- -y
+      - run: elan self update
+        shell: bash -l {0}
+      - name: Install Lean
+        run: elan default leanprover/lean4:nightly
+        shell: bash -l {0}
+      - name: Build
+        run: leanpkg build
+        shell: bash -l {0}
+      - name: Build Binary
+        run: leanpkg build bin
+        shell: bash -l {0}
