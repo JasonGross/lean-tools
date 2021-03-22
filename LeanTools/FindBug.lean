@@ -10,16 +10,28 @@ def List.takeOpt : Option Nat → List α → List α
   | Option.none, ls => ls
   | Option.some n, ls => ls.take n
 
+namespace Lean.MessageSeverity
+deriving instance DecidableEq for Lean.MessageSeverity
+end Lean.MessageSeverity
+
 namespace LeanTools.FindBug
 
 structure Options where
   lean_path : List String := []
   init_search_path : Bool := true
   max_error_count : Option Nat := Option.none
+  only_errors : Bool := true
+  deriving Repr
+
+
+structure InitialState extends Options where
+  messages_to_match : List String
+  message_filter : Lean.MessageLog → IO (List String)
+
+structure State extends InitialState where
+  contents : String
 
 def Options.default : Options := { }
-
-deriving instance Repr for Options
 
 instance : ToString Options where
   toString (o : Options) := s!"{repr o}"
@@ -52,6 +64,23 @@ def runLean (input : String) (opts : Lean.Options) (fileName : String) : IO (Lea
   let s ← Elab.IO.processCommands inputCtx parserState (Elab.Command.mkState env messages opts)
   pure (s.commandState.env, s.commandState.messages)
 
+def firstRun (opts : Options) (inputFileName : String) : IO (Sum UInt32 State) := do
+  let contents ← IO.FS.readFile inputFileName
+  let (env, msgs) ← runLean contents Lean.Options.empty inputFileName
+  let check_message : Lean.Message → Bool :=
+    if opts.only_errors
+    then (λ msg => decide (msg.severity = Lean.MessageSeverity.error))
+    else (λ msg => true)
+  let filter_messages := λ (msgs : Lean.MessageLog) =>
+      List.mapM (λ msg : Lean.Message => msg.data.toString) (List.filter check_message (msgs.toList.takeOpt opts.max_error_count))
+  let st : State := { toOptions := opts
+                    , message_filter := filter_messages
+                    , messages_to_match := (← filter_messages msgs)
+                    , contents := contents }
+  for msg in st.messages_to_match do
+    IO.println msg
+  pure (Sum.inr st)
+
 def run' (args : List String) : IO UInt32 := do
   IO.println args
   match args with
@@ -63,11 +92,9 @@ def run' (args : List String) : IO UInt32 := do
       | [] => Option.none
       | _ => Option.some ([System.FilePath.searchPathSeparator].asString.intercalate opts.lean_path)
     if opts.init_search_path then Lean.initSearchPath sp else pure ()
-    let contents ← IO.FS.readFile inputFileName
-    let (env, msgs) ← runLean contents Lean.Options.empty inputFileName
-    for msg in msgs.toList.takeOpt opts.max_error_count do
-      IO.print (← msg.toString (includeEndPos := true))
-    pure 0
+    match (← firstRun opts inputFileName) with
+    | Sum.inr st => pure 0
+    | Sum.inl err => pure err
   | _ =>
     IO.println s!"Not enough arguments {args}"
     pure 1
