@@ -18,6 +18,7 @@ def run' (args : List String) : IO UInt32 := do
   IO.println args
   match args with
   | inputFileName :: outputFileName :: rest_args =>
+    Lean.initSearchPath Option.none
     let contents ← IO.FS.readFile inputFileName
     let (env, msgs) ← runLean contents Lean.Options.empty inputFileName
     for msg in msgs.toList do
