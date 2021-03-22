@@ -1,6 +1,3 @@
 [package]
 name = "LeanTools"
 version = "0.1"
-
-[dependencies]
-Cli = {git = "https://github.com/mhuisi/lean4-cli", rev = "58c23fca676bb7121be4eda6eae936fb98aa2507"}
